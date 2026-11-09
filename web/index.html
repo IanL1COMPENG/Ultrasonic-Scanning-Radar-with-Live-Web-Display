@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ultrasonic Radar</title>
+<style>
+  :root {
+    --bg: #050d0a;
+    --panel: #0b1a14;
+    --panel-2: #0f231b;
+    --line: #1b3a2d;
+    --grid: rgba(78, 240, 160, 0.16);
+    --grid-strong: rgba(78, 240, 160, 0.32);
+    --accent: #4ef0a0;
+    --accent-dim: #2b8a5d;
+    --warn: #ffb547;
+    --danger: #ff5d5d;
+    --text: #d7f4e5;
+    --muted: #7da893;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { min-height: 100vh; }
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: 0.02em; }
+  header .sub { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+  .badge {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+    font: 12px var(--mono); padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .badge.live .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .badge.demo .dot { background: var(--warn); }
+  .badge.down .dot { background: var(--danger); }
+
+  main {
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px;
+    padding: 16px 20px 28px; max-width: 1400px; margin: 0 auto;
+  }
+  @media (max-width: 960px) { main { grid-template-columns: minmax(0, 1fr); padding: 12px 16px 24px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .card h2 {
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0; padding: 12px 14px 0;
+  }
+  .radar-card { position: relative; padding: 8px; }
+  #radar { display: block; width: 100%; height: auto; cursor: crosshair; }
+  .readout {
+    position: absolute; left: 18px; top: 14px; font: 12px var(--mono); color: var(--muted);
+    pointer-events: none;
+  }
+  .readout b { color: var(--text); font-weight: 600; }
+  .legend {
+    position: absolute; right: 18px; top: 14px; font: 11px var(--mono); color: var(--muted);
+    display: flex; align-items: center; gap: 6px; pointer-events: none;
+  }
+  .legend i { width: 90px; height: 6px; border-radius: 3px;
+    background: linear-gradient(90deg, #ff4d4d, #ffb547, #4ef0a0); }
+
+  .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line);
+    border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+  .stat { background: var(--panel); padding: 12px 14px; min-width: 0; }
+  .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat .v { font: 600 22px var(--mono); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat .v small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .stat.big { grid-column: span 2; }
+  .stat.big .v { font-size: 34px; color: var(--accent); }
+
+  .controls { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: 600 13px var(--sans); color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent-dim); }
+  button.primary { background: var(--accent); color: #04140c; border-color: var(--accent); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 120px; }
+  input[type=number] {
+    width: 86px; font: 13px var(--mono); color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px;
+  }
+  label { font-size: 13px; color: var(--muted); }
+  .mono { font-family: var(--mono); }
+  .muted { color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+  table { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
+  th, td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  td.bad { color: var(--warn); }
+  td.good { color: var(--accent); }
+  .progress { height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width 0.1s; }
+  .diag { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 12px 14px 14px;
+    font: 12px var(--mono); }
+  .diag span:nth-child(odd) { color: var(--muted); }
+  .diag span:nth-child(even) { text-align: right; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ultrasonic Scanning Radar</h1>
+  <span class="sub" id="fw">ESP32 Â· HC-SR04 Â· 0â€“180Â°</span>
+  <span class="badge" id="conn"><span class="dot"></span><span id="connText">connectingâ€¦</span></span>
+</header>
+
+<main>
+  <section class="card radar-card">
+    <canvas id="radar" width="900" height="500" aria-label="Radar sweep display"></canvas>
+    <div class="readout" id="cursor">hover the radar for coordinates</div>
+    <div class="legend"><span>near</span><i></i><span>far</span></div>
+  </section>
+
+  <aside class="side">
+    <div class="stats">
+      <div class="stat big"><div class="k">Distance</div><div class="v" id="sDist">â€”</div></div>
+      <div class="stat"><div class="k">Angle</div><div class="v" id="sAngle">â€”</div></div>
+      <div class="stat"><div class="k">Scan rate</div><div class="v" id="sRate">â€”</div></div>
+      <div class="stat"><div class="k">Temperature</div><div class="v" id="sTemp">â€”</div></div>
+      <div class="stat"><div class="k">Speed of sound</div><div class="v" id="sSos">â€”</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Scanner</h2>
+      <div class="controls">
+        <div class="row">
+          <button class="primary" id="btnSweep">Sweep</button>
+          <button id="btnPause">Pause</button>
+          <button id="btnClear">Clear map</button>
+        </div>
+        <div class="row">
+          <label for="holdAngle">Hold</label>
+          <input type="range" id="holdAngle" min="0" max="180" step="1" value="90">
+          <span class="mono" id="holdVal" style="width:38px;text-align:right">90Â°</span>
+          <button id="btnHold">Hold</button>
+        </div>
+        <div class="muted" id="modeLine">Mode: â€”</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Accuracy test</h2>
+      <div class="controls">
+        <div class="muted">Point the sensor at a flat target, hold the angle, measure the true
+          distance with a tape measure, then capture. Repeat at several distances from 5 to 150 cm.</div>
+        <div class="row">
+          <label for="trueCm">True cm</label>
+          <input type="number" id="trueCm" min="2" max="400" step="0.1" value="50">
+          <label for="nSamples">n</label>
+          <input type="number" id="nSamples" min="5" max="500" step="1" value="40" style="width:64px">
+          <button class="primary" id="btnCapture">Capture</button>
+        </div>
+        <div class="progress"><div id="capBar"></div></div>
+        <table>
+          <thead><tr><th>true</th><th>mean</th><th>Ïƒ</th><th>error</th><th>n</th><th></th></tr></thead>
+          <tbody id="calRows"></tbody>
+        </table>
+        <div class="muted mono" id="calSummary">No captures yet.</div>
+        <div class="row">
+          <button id="btnExport">Export CSV</button>
+          <button id="btnResetCal">Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Diagnostics</h2>
+      <div class="diag">
+        <span>mode</span><span id="dMode">â€”</span>
+        <span>overruns</span><span id="dOver">â€”</span>
+        <span>worst cycle</span><span id="dCycle">â€”</span>
+        <span>dropped</span><span id="dDrop">â€”</span>
+        <span>clients</span><span id="dClients">â€”</span>
+        <span>wi-fi</span><span id="dWifi">â€”</span>
+        <span>uptime</span><span id="dUp">â€”</span>
+        <span>free heap</span><span id="dHeap">â€”</span>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const N_ANGLES = 181;
+const S = {
+  maxRange: 150, minRange: 2, periodMs: 50, step: 2,
+  dist: new Float32Array(N_ANGLES).fill(-1),
+  stamp: new Float64Array(N_ANGLES),
+  angle: 90, dir: 1, lastDist: -1, lastValid: 0,
+  status: null, mode: "sweep", source: null,
+};
+const $ = (id) => document.getElementById(id);
+
+// ---------------------------------------------------------------------------
+// Data sources: the ESP32 over WebSocket, or a simulator for demo/dev
+// ---------------------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const demoRequested = params.has("demo") || location.protocol === "file:" ||
+                      location.protocol === "https:" || location.hostname === "";
+
+class DeviceSource {
+  constructor(host) {
+    this.url = `ws://${host}:81/`;
+    this.ws = null; this.retry = 500; this.failures = 0;
+    this.connect();
+  }
+  connect() {
+    setConn("", `connecting to ${this.url.replace("ws://", "").replace(/\/$/, "")}â€¦`);
+    let ws;
+    try { ws = new WebSocket(this.url); } catch (e) { return this.scheduleRetry(); }
+    this.ws = ws;
+    ws.onopen = () => { this.retry = 500; this.failures = 0; setConn("live", "live"); };
+    ws.onmessage = (ev) => { try { handle(JSON.parse(ev.data)); } catch (e) { console.warn(e); } };
+    ws.onclose = () => { setConn("down", "disconnected â€” retrying"); this.scheduleRetry(); };
+    ws.onerror = () => ws.close();
+  }
+  scheduleRetry() {
+    this.failures++;
+    setTimeout(() => this.connect(), this.retry);
+    this.retry = Math.min(this.retry * 2, 5000);
+  }
+  send(obj) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj)); }
+}
+
+// Simulates the firmware: same sweep, same 5-ping median, same messages.
+class DemoSource {
+  constructor() {
+    setConn("demo", "demo (simulated)");
+    this.angle = 0; this.dir = 1; this.mode = "sweep"; this.hold = 90; this.seq = 0;
+    this.temp = 22.4; this.t0 = performance.now(); this.count = 0; this.rate = 20;
+    this.rateT = performance.now(); this.rateN = 0;
+    setTimeout(() => {
+      handle({ type: "hello", fw: "demo", minRange: 2, maxRange: 150, step: 2, periodMs: 50, pings: 5 });
+      handle({ type: "snapshot", d: new Array(N_ANGLES).fill(-1) });
+    }, 0);
+    setInterval(() => this.tick(), 50);
+    setInterval(() => this.status(), 500);
+  }
+  world(t) {
+    const orbit = t / 6000;
+    return {
+      circles: [
+        { x: 45, y: 55, r: 9 },
+        { x: -60, y: 35, r: 6 },
+        { x: 20 + 35 * Math.cos(orbit), y: 95 + 12 * Math.sin(orbit), r: 5 }, // moving target
+      ],
+      segs: [
+        [-140, 128, -20, 140], [-20, 140, 70, 118], [70, 118, 120, 60],
+        [-120, 10, -95, 80],
+      ],
+    };
+  }
+  raycast(angleDeg, w) {
+    // HC-SR04 beam is ~15Â° wide: return the nearest hit inside the cone.
+    let best = Infinity;
+    for (let off = -7; off <= 7; off += 1.75) {
+      const a = (angleDeg + off) * Math.PI / 180, dx = Math.cos(a), dy = Math.sin(a);
+      for (const c of w.circles) {
+        const b = dx * c.x + dy * c.y, disc = b * b - (c.x * c.x + c.y * c.y - c.r * c.r);
+        if (disc >= 0) { const t = b - Math.sqrt(disc); if (t > 0 && t < best) best = t; }
+      }
+      for (const [x1, y1, x2, y2] of w.segs) {
+        const ex = x2 - x1, ey = y2 - y1, den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-9) continue;
+        const t = (x1 * ey - y1 * ex) / den, u = (x1 * dy - y1 * dx) / den;
+        if (t > 0 && u >= 0 && u <= 1 && t < best) best = t;
+      }
+    }
+    return best;
+  }
+  ping(trueCm) {
+    if (!(trueCm <= S.maxRange)) return Math.random() < 0.06 ? 20 + Math.random() * 120 : -1;
+    const r = Math.random();
+    if (r < 0.12) return 15 + Math.random() * 130;    // multipath / crosstalk outlier
+    if (r < 0.17) return -1;                          // missed echo
+    return trueCm + (Math.random() + Math.random() + Math.random() - 1.5) * 0.6;
+  }
+  tick() {
+    if (this.mode === "paused") return;
+    const t = performance.now(), w = this.world(t);
+    const truth = this.raycast(this.angle, w);
+    const pings = Array.from({ length: 5 }, () => this.ping(truth));
+    const valid = pings.filter((v) => v > 0).sort((a, b) => a - b);
+    let d = -1;
+    if (valid.length >= 3) {
+      const m = valid.length >> 1;
+      d = valid.length % 2 ? valid[m] : (valid[m - 1] + valid[m]) / 2;
+    }
+    handle({ type: "s", s: [[this.angle, +d.toFixed(1), this.mode === "hold" ? 0 : this.dir, valid.length, this.seq++]] });
+    this.rateN++;
+    if (this.mode === "hold") { this.angle = this.hold; return; }
+    let next = this.angle + this.dir * 2;
+    if (next > 180) { this.dir = -1; next = 178; } else if (next < 0) { this.dir = 1; next = 2; }
+    this.angle = next;
+    if (this.angle === 180) this.dir = -1;
+    if (this.angle === 0) this.dir = 1;
+  }
+  status() {
+    const now = performance.now();
+    this.rate = this.rateN * 1000 / (now - this.rateT); this.rateT = now; this.rateN = 0;
+    this.temp += (Math.random() - 0.5) * 0.04;
+    const sos = 331.3 * Math.sqrt(1 + this.temp / 273.15);
+    handle({ type: "status", temp: this.temp, tempValid: true, sos, rate: this.rate, overruns: 0,
+      dropped: 0, maxCycleMs: 18 + Math.random() * 14, mode: this.mode, hold: this.hold, clients: 1,
+      rssi: -52, ap: false, ip: "demo", uptime: Math.round((now - this.t0) / 1000), heap: 214000 });
+  }
+  send(cmd) {
+    if (cmd.cmd === "pause") this.mode = "paused";
+    else if (cmd.cmd === "sweep" || cmd.cmd === "resume") this.mode = "sweep";
+    else if (cmd.cmd === "hold") { this.mode = "hold"; this.hold = cmd.angle; this.angle = cmd.angle; }
+    else if (cmd.cmd === "clear") { S.dist.fill(-1); }
+    this.status();
+  }
+}
+
+function setConn(kind, text) {
+  $("conn").className = "badge " + kind;
+  $("connText").textContent = text;
+}
+
+// ---------------------------------------------------------------------------
+// Message handling
+// ---------------------------------------------------------------------------
+function handle(msg) {
+  switch (msg.type) {
+    case "hello":
+      S.maxRange = msg.maxRange; S.minRange = msg.minRange; S.periodMs = msg.periodMs; S.step = msg.step;
+      $("fw").textContent = `fw ${msg.fw} Â· ${msg.pings}-ping median Â· ${Math.round(1000 / msg.periodMs)} Hz Â· ${msg.minRange}â€“${msg.maxRange} cm`;
+      break;
+    case "snapshot": {
+      const now = performance.now();
+      msg.d.forEach((v, a) => { S.dist[a] = v; S.stamp[a] = now - sweepPeriodMs() * 0.6; });
+      break;
+    }
+    case "s":
+      for (const [a, d, dir, valid] of msg.s) onSample(a, d, dir, valid);
+      break;
+    case "status":
+      onStatus(msg);
+      break;
+  }
+}
+
+function onSample(a, d, dir, valid) {
+  if (a < 0 || a >= N_ANGLES) return;
+  const now = performance.now();
+  S.dist[a] = d; S.stamp[a] = now;
+  // Clear angles skipped by the step so stale points don't linger between them.
+  for (let k = 1; k < S.step && a + k < N_ANGLES; k++) S.dist[a + k] = -1;
+  S.angle = a; if (dir) S.dir = dir;
+  S.lastDist = d; S.lastValid = valid;
+  $("sDist").innerHTML = d > 0 ? `${d.toFixed(1)}<small>cm</small>` : `â€”<small>no echo</small>`;
+  $("sAngle").innerHTML = `${a}<small>Â°</small>`;
+  calibration.onSample(a, d);
+}
+
+function onStatus(st) {
+  S.status = st; S.mode = st.mode;
+  $("sRate").innerHTML = `${st.rate.toFixed(1)}<small>Hz</small>`;
+  $("sTemp").innerHTML = `${st.temp.toFixed(1)}<small>Â°C${st.tempValid ? "" : " (default)"}</small>`;
+  $("sSos").innerHTML = `${st.sos.toFixed(1)}<small>m/s</small>`;
+  $("dMode").textContent = st.mode + (st.mode === "hold" ? ` @ ${st.hold}Â°` : "");
+  $("dOver").textContent = st.overruns;
+  $("dCycle").textContent = `${st.maxCycleMs.toFixed(1)} ms / ${S.periodMs} ms`;
+  $("dDrop").textContent = st.dropped;
+  $("dClients").textContent = st.clients;
+  $("dWifi").textContent = st.ap ? `AP ${st.ip}` : `${st.ip} (${st.rssi} dBm)`;
+  $("dUp").textContent = fmtUptime(st.uptime);
+  $("dHeap").textContent = `${(st.heap / 1024).toFixed(0)} KiB`;
+  $("modeLine").textContent = "Mode: " + ({ sweep: "sweeping 0â€“180Â°", paused: "paused",
+    hold: `holding at ${st.hold}Â°` }[st.mode] || st.mode);
+  $("btnPause").textContent = st.mode === "paused" ? "Resume" : "Pause";
+}
+
+function fmtUptime(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+const sweepPeriodMs = () => 2 * (180 / S.step) * S.periodMs;  // full there-and-back
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+const canvas = $("radar"), ctx = canvas.getContext("2d");
+let geo = { w: 900, h: 500, cx: 450, cy: 470, R: 420, dpr: 1 };
+
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(280, rect.width);
+  const h = Math.round(w * 0.56);
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  canvas.style.height = h + "px";
+  const pad = Math.max(18, w * 0.035);
+  const R = Math.min(w / 2 - pad, h - pad * 1.6);
+  geo = { w, h, cx: w / 2, cy: h - pad * 0.9, R, dpr };
+}
+window.addEventListener("resize", resize);
+
+function polar(angleDeg, cm) {
+  const r = (cm / S.maxRange) * geo.R, a = angleDeg * Math.PI / 180;
+  return [geo.cx + r * Math.cos(a), geo.cy - r * Math.sin(a)];
+}
+
+function distColor(cm, alpha) {
+  // near = red, mid = amber, far = green
+  const t = Math.max(0, Math.min(1, cm / S.maxRange));
+  const hue = t < 0.5 ? 0 + t * 2 * 38 : 38 + (t - 0.5) * 2 * 112;
+  return `hsla(${hue}, 95%, 60%, ${alpha})`;
+}
+
+function drawGrid() {
+  const { cx, cy, R } = geo;
+  ctx.lineWidth = 1;
+  // range rings every 25 cm
+  const ringStep = S.maxRange <= 160 ? 25 : 50;
+  ctx.font = `${Math.max(10, R * 0.028)}px ${getComputedStyle(document.body).getPropertyValue("--mono")}`;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let cm = ringStep; cm <= S.maxRange + 0.01; cm += ringStep) {
+    const r = (cm / S.maxRange) * R;
+    ctx.strokeStyle = cm === S.maxRange ? "rgba(78,240,160,0.4)" : "rgba(78,240,160,0.15)";
+    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI); ctx.stroke();
+    ctx.fillStyle = "rgba(125,168,147,0.85)";
+    ctx.fillText(`${cm}`, cx + r, cy + 4);
+    ctx.fillText(`${cm}`, cx - r, cy + 4);
+  }
+  // spokes every 30Â°
+  ctx.textBaseline = "middle";
+  for (let a = 0; a <= 180; a += 30) {
+    const [x, y] = polar(a, S.maxRange);
+    ctx.strokeStyle = "rgba(78,240,160,0.13)";
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+    const [lx, ly] = polar(a, S.maxRange * 1.055);
+    ctx.fillStyle = "rgba(125,168,147,0.9)";
+    if (a !== 0 && a !== 180) ctx.fillText(`${a}Â°`, lx, ly);
+  }
+  ctx.strokeStyle = "rgba(78,240,160,0.4)";
+  ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+}
+
+function drawBeam() {
+  const { cx, cy, R } = geo;
+  const a = S.angle, trail = 28, mode = S.mode;
+  if (mode === "hold") {
+    // static Â±7.5Â° beam cone
+    ctx.fillStyle = "rgba(78,240,160,0.10)";
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, -(a + 7.5) * Math.PI / 180, -(a - 7.5) * Math.PI / 180); ctx.closePath(); ctx.fill();
+  } else {
+    for (let i = 0; i < trail; i++) {
+      const a1 = a - S.dir * i, a2 = a - S.dir * (i + 1);
+      const lo = Math.min(a1, a2), hi = Math.max(a1, a2);
+      if (hi < 0 || lo > 180) continue;
+      ctx.fillStyle = `rgba(78,240,160,${0.22 * (1 - i / trail) ** 1.6})`;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, R, -Math.min(hi, 180) * Math.PI / 180, -Math.max(lo, 0) * Math.PI / 180);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  const [x, y] = polar(a, S.maxRange);
+  ctx.strokeStyle = mode === "paused" ? "rgba(255,181,71,0.8)" : "rgba(78,240,160,0.95)";
+  ctx.lineWidth = 2; ctx.shadowColor = "#4ef0a0"; ctx.shadowBlur = mode === "paused" ? 0 : 10;
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.lineWidth = 1;
+}
+
+function drawEchoes(now) {
+  const fade = sweepPeriodMs() * 1.05;
+  // Outline: join neighbouring returns that belong to the same surface.
+  ctx.lineWidth = 1.5;
+  let prev = null;
+  for (let a = 0; a < N_ANGLES; a++) {
+    const d = S.dist[a];
+    if (!(d > 0)) continue;
+    if (prev && a - prev.a <= S.step && Math.abs(d - prev.d) < 8) {
+      const age = Math.min(1, (now - Math.min(S.stamp[a], S.stamp[prev.a])) / fade);
+      ctx.strokeStyle = distColor(d, 0.55 * (1 - age) + 0.08);
+      const [x1, y1] = polar(prev.a, prev.d), [x2, y2] = polar(a, d);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+    prev = { a, d };
+  }
+  // Blips
+  const size = Math.max(2.2, geo.R * 0.008);
+  for (let a = 0; a < N_ANGLES; a++) {
+    const d = S.dist[a];
+    if (!(d > 0)) continue;
+    const age = Math.min(1, (now - S.stamp[a]) / fade);
+    const alpha = 1 - age * 0.82;
+    const [x, y] = polar(a, d);
+    ctx.fillStyle = distColor(d, alpha);
+    if (age < 0.08) { ctx.shadowColor = distColor(d, 1); ctx.shadowBlur = 12; }
+    ctx.beginPath(); ctx.arc(x, y, age < 0.08 ? size * 1.5 : size, 0, 2 * Math.PI); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
+
+function frame() {
+  const now = performance.now();
+  ctx.setTransform(geo.dpr, 0, 0, geo.dpr, 0, 0);
+  ctx.clearRect(0, 0, geo.w, geo.h);
+  const g = ctx.createRadialGradient(geo.cx, geo.cy, 0, geo.cx, geo.cy, geo.R);
+  g.addColorStop(0, "rgba(78,240,160,0.07)"); g.addColorStop(1, "rgba(78,240,160,0.015)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(geo.cx, geo.cy); ctx.arc(geo.cx, geo.cy, geo.R, Math.PI, 2 * Math.PI); ctx.fill();
+  drawGrid();
+  drawBeam();
+  drawEchoes(now);
+  requestAnimationFrame(frame);
+}
+
+canvas.addEventListener("mousemove", (e) => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left - geo.cx, y = geo.cy - (e.clientY - r.top);
+  const cm = Math.hypot(x, y) / geo.R * S.maxRange, a = Math.atan2(y, x) * 180 / Math.PI;
+  if (y < 0 || cm > S.maxRange) { $("cursor").textContent = "hover the radar for coordinates"; return; }
+  const ai = Math.round(a / S.step) * S.step, d = S.dist[ai];
+  $("cursor").innerHTML = `cursor <b>${a.toFixed(0)}Â°</b> Â· <b>${cm.toFixed(0)} cm</b>` +
+    (d > 0 ? ` &nbsp;|&nbsp; echo @${ai}Â°: <b>${d.toFixed(1)} cm</b>` : "");
+});
+canvas.addEventListener("click", (e) => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left - geo.cx, y = geo.cy - (e.clientY - r.top);
+  if (y < 0) return;
+  const a = Math.round(Math.atan2(y, x) * 180 / Math.PI);
+  $("holdAngle").value = a; $("holdVal").textContent = `${a}Â°`;
+});
+
+// ---------------------------------------------------------------------------
+// Accuracy test (tape-measure fixture)
+// ---------------------------------------------------------------------------
+const calibration = {
+  rows: [], active: null,
+  load() {
+    try { this.rows = JSON.parse(localStorage.getItem("radar.cal") || "[]"); } catch (e) { this.rows = []; }
+    this.render();
+  },
+  save() { try { localStorage.setItem("radar.cal", JSON.stringify(this.rows)); } catch (e) {} },
+  start(trueCm, n) {
+    if (S.mode !== "hold") cmd({ cmd: "hold", angle: +$("holdAngle").value });
+    this.active = { trueCm, n, samples: [], skip: 3 };  // skip readings taken while settling
+    $("btnCapture").disabled = true;
+  },
+  onSample(a, d) {
+    const c = this.active;
+    if (!c) return;
+    if (c.skip > 0) { c.skip--; return; }
+    if (d > 0) c.samples.push(d);
+    $("capBar").style.width = `${(100 * c.samples.length) / c.n}%`;
+    if (c.samples.length >= c.n) this.finish();
+  },
+  finish() {
+    const c = this.active; this.active = null;
+    const n = c.samples.length, mean = c.samples.reduce((s, v) => s + v, 0) / n;
+    const sd = Math.sqrt(c.samples.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(1, n - 1));
+    this.rows.push({ trueCm: c.trueCm, mean, sd, err: mean - c.trueCm, n, temp: S.status ? S.status.temp : null });
+    this.rows.sort((a, b) => a.trueCm - b.trueCm);
+    this.save(); this.render();
+    $("btnCapture").disabled = false;
+    setTimeout(() => { $("capBar").style.width = "0"; }, 600);
+  },
+  render() {
+    $("calRows").innerHTML = this.rows.map((r, i) => {
+      const cls = Math.abs(r.err) <= 1 ? "good" : "bad";
+      return `<tr><td>${r.trueCm.toFixed(1)}</td><td>${r.mean.toFixed(2)}</td><td>${r.sd.toFixed(2)}</td>` +
+        `<td class="${cls}">${r.err >= 0 ? "+" : ""}${r.err.toFixed(2)}</td><td>${r.n}</td>` +
+        `<td><button data-del="${i}" style="padding:2px 7px">Ã—</button></td></tr>`;
+    }).join("");
+    if (!this.rows.length) { $("calSummary").textContent = "No captures yet."; return; }
+    const worst = Math.max(...this.rows.map((r) => Math.abs(r.err)));
+    let text = `max |error| ${worst.toFixed(2)} cm over ${this.rows.length} distance(s)`;
+    if (this.rows.length >= 2) {
+      // Least-squares fit  true = a * measured + b  ->  CAL_SCALE / CAL_OFFSET_CM
+      const xs = this.rows.map((r) => r.mean), ys = this.rows.map((r) => r.trueCm), k = xs.length;
+      const mx = xs.reduce((s, v) => s + v, 0) / k, my = ys.reduce((s, v) => s + v, 0) / k;
+      let sxy = 0, sxx = 0;
+      for (let i = 0; i < k; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; }
+      if (sxx > 0) {
+        const a = sxy / sxx, b = my - a * mx;
+        const resid = Math.max(...xs.map((x, i) => Math.abs(a * x + b - ys[i])));
+        text += `\nfit: CAL_SCALE=${a.toFixed(4)}  CAL_OFFSET_CM=${b.toFixed(2)}  (residual â‰¤ ${resid.toFixed(2)} cm)`;
+      }
+    }
+    $("calSummary").style.whiteSpace = "pre-wrap";
+    $("calSummary").textContent = text;
+  },
+  csv() {
+    const head = "true_cm,mean_cm,sd_cm,error_cm,n,temp_c";
+    const lines = this.rows.map((r) => [r.trueCm, r.mean.toFixed(3), r.sd.toFixed(3), r.err.toFixed(3), r.n,
+      r.temp == null ? "" : r.temp.toFixed(2)].join(","));
+    return [head, ...lines].join("\n") + "\n";
+  },
+};
+
+$("calRows").addEventListener("click", (e) => {
+  const i = e.target.getAttribute("data-del");
+  if (i == null) return;
+  calibration.rows.splice(+i, 1); calibration.save(); calibration.render();
+});
+$("btnCapture").onclick = () => {
+  const t = parseFloat($("trueCm").value), n = parseInt($("nSamples").value, 10);
+  if (!(t > 0) || !(n > 0)) return;
+  calibration.start(t, n);
+};
+$("btnExport").onclick = () => {
+  const blob = new Blob([calibration.csv()], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "radar-accuracy.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$("btnResetCal").onclick = () => { calibration.rows = []; calibration.save(); calibration.render(); };
+
+// ---------------------------------------------------------------------------
+// Controls
+// ---------------------------------------------------------------------------
+function cmd(obj) { if (S.source) S.source.send(obj); }
+$("btnSweep").onclick = () => cmd({ cmd: "sweep" });
+$("btnPause").onclick = () => cmd({ cmd: S.mode === "paused" ? "resume" : "pause" });
+$("btnClear").onclick = () => { S.dist.fill(-1); cmd({ cmd: "clear" }); };
+$("btnHold").onclick = () => cmd({ cmd: "hold", angle: +$("holdAngle").value });
+$("holdAngle").oninput = (e) => {
+  $("holdVal").textContent = `${e.target.value}Â°`;
+  if (S.mode === "hold") cmd({ cmd: "hold", angle: +e.target.value });
+};
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+resize();
+calibration.load();
+S.source = demoRequested ? new DemoSource() : new DeviceSource(params.get("host") || location.hostname);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

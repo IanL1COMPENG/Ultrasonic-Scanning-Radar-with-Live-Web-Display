@@ -1,0 +1,7 @@
+{
+  "name": "RadarCore",
+  "version": "1.0.0",
+  "description": "Hardware-independent signal processing for the ultrasonic radar: speed-of-sound compensation, median filtering and sweep control.",
+  "frameworks": "*",
+  "platforms": "*"
+}
